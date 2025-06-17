@@ -1,1 +1,7 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?><node artifactManager="be.nabu.eai.module.maven.MavenLibraryManager" lastModified="2016-05-28T15:11:14.650+02:00" leaf="true" version="32"><environmentId>chaos</environmentId><properties/></node>
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<node artifactManager="be.nabu.eai.module.maven.MavenLibraryManager" created="2025-06-16T17:20:35.259+02:00" lastModified="2025-06-16T17:25:26.229+02:00" leaf="true" version="34">
+    <environmentId>ares</environmentId>
+    <hidden>false</hidden>
+    <locked>false</locked>
+    <properties/>
+</node>
