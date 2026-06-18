@@ -47,6 +47,12 @@ jobs:
           -Dfile=modules.xml
           -DpomFile=modules.xml
 
+      - name: Inject nar packaging for CI build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c "from pathlib import Path; path = Path('pom.xml'); text = path.read_text(); marker = '<name>'; packaging = '\t<packaging>nar</packaging>\n'; path.write_text(text if '<packaging>' in text else text.replace(marker, packaging + marker, 1))"
+
       - name: Determine release version
         id: version
         shell: bash
