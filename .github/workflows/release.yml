@@ -100,6 +100,68 @@ jobs:
           MAVEN_BUILD_USER: ${{ secrets.MAVEN_BUILD_USER }}
           MAVEN_BUILD_TOKEN: ${{ secrets.MAVEN_BUILD_TOKEN }}
 
+      - name: Copy dependency types from resolved BOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/copy_bom_types.py" <<'PY'
+          import base64
+          import os
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          ET.register_namespace('', 'http://maven.apache.org/POM/4.0.0')
+          ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+          metadata = Path(os.environ['RUNNER_TEMP']) / 'modules-bom-metadata.xml'
+          root = ET.parse(metadata).getroot()
+          matches = [
+            (node.findtext('updated') or '', node.findtext('value') or '')
+            for node in root.findall('./versioning/snapshotVersions/snapshotVersion')
+            if node.findtext('extension') == 'pom'
+          ]
+          if not matches:
+            raise RuntimeError('Could not resolve snapshot POM version from metadata')
+          bom_version = max(matches)[1]
+          url = f'https://maven.pkg.github.com/nabu-platform/maven/be/nabu/modules-bom/1.0-SNAPSHOT/modules-bom-{bom_version}.pom'
+          credentials = f"{os.environ['MAVEN_BUILD_USER']}:{os.environ['MAVEN_BUILD_TOKEN']}".encode()
+          request = urllib.request.Request(url)
+          request.add_header('Authorization', 'Basic ' + base64.b64encode(credentials).decode())
+          bom_root = ET.parse(urllib.request.urlopen(request)).getroot()
+          dep_mgmt = bom_root.find('m:dependencyManagement', ns)
+          managed = {}
+          for dep in dep_mgmt.find('m:dependencies', ns).findall('m:dependency', ns):
+            group_id = dep.findtext('m:groupId', default='', namespaces=ns)
+            artifact_id = dep.findtext('m:artifactId', default='', namespaces=ns)
+            type_value = dep.findtext('m:type', default='', namespaces=ns)
+            if type_value:
+              managed[(group_id, artifact_id)] = type_value
+          pom_tree = ET.parse('pom.xml')
+          pom_root = pom_tree.getroot()
+          deps_node = pom_root.find('m:dependencies', ns)
+          if deps_node is not None:
+            for dep in deps_node.findall('m:dependency', ns):
+              if dep.find('m:type', ns) is not None:
+                continue
+              group_id = dep.findtext('m:groupId', default='', namespaces=ns)
+              artifact_id = dep.findtext('m:artifactId', default='', namespaces=ns)
+              type_value = managed.get((group_id, artifact_id))
+              if not type_value:
+                continue
+              type_element = ET.Element('{http://maven.apache.org/POM/4.0.0}type')
+              type_element.text = type_value
+              dep.append(type_element)
+          ET.indent(pom_tree, space='\t')
+          pom_tree.write('pom.xml', encoding='unicode')
+          PY
+          python3 "$RUNNER_TEMP/copy_bom_types.py"
+          echo 'Dependencies after BOM type injection:'
+          grep -n -A4 -B1 '<dependency>' pom.xml
+        env:
+          MAVEN_BUILD_USER: ${{ secrets.MAVEN_BUILD_USER }}
+          MAVEN_BUILD_TOKEN: ${{ secrets.MAVEN_BUILD_TOKEN }}
+
       - name: Determine release version
         id: version
         shell: bash
